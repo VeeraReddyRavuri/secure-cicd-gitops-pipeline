@@ -48,3 +48,9 @@ jobs:
         uses: actions/checkout@v4
       - name: build docker image
         run: docker build -t $IMAGE_NAME:$IMAGE_TAG .
+      - name: add trivy scan for the image
+        uses: aquasecurity/trivy-action@0.20.0
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          severity: CRITICAL
+          exit-code: 1
