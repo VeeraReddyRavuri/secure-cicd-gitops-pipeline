@@ -1,2 +1,8 @@
-def add(a, b):
-    return a + b
+from fastapi import FastAPI
+
+app = FastAPI()
+
+
+@app.get("/")
+def read_root():
+    return {"message": "app running"}
