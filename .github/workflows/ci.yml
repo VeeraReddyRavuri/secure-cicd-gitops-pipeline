@@ -91,3 +91,19 @@ jobs:
       
       - name: upload metadata to s3
         run: aws s3 cp metadata.json s3://cicd-deploy-metadata-p4/metadata-${{ github.sha }}.json
+
+      - name: setup ssh
+        run: |
+          mkdir -p ~/.ssh
+          echo "{{ secrets.MANIFEST_REPO_SSH_KEY }}" > ~/.ssh/p4_id_ed25519
+          chmod 600 ~/.ssh/p4_id_ed25519
+          ssh-keyscan github.com >> ~/.ssh/known_hosts
+      
+      - name: clone manifest repo
+        run: |
+          git clone git@github.com:VeeraReddyRavuri/app-manifest-repo.git
+      
+      - name: update image tag
+        run: |
+          cd app-manifest-repo/k8s
+          sed -i "s|image: .*|image: $DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG|" deployment.yaml
