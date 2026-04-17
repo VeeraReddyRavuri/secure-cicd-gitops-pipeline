@@ -107,3 +107,20 @@ jobs:
         run: |
           cd app-manifest-repo/k8s
           sed -i "s|image: .*|image: $DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG|" deployment.yaml
+
+      - name: configure git
+        run: |
+          cd app-manifest-repo
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+        
+      - name: commit changes
+        run: |
+          cd app-manifest-repo
+          git add .
+          git commit -m "update image to $IMAGE_TAG" || echo "no changes"
+
+      - name: push changes
+        run: |
+          cd app-manifest-repo
+          git push origin main
