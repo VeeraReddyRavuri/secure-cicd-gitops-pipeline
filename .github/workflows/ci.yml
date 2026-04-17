@@ -58,7 +58,7 @@ jobs:
         run: docker build -t $DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG .
 
       - name: add trivy scan for the image
-        uses: aquasecurity/trivy-action@0.20.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           image-ref: ${{ env.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
           severity: CRITICAL
@@ -72,3 +72,12 @@ jobs:
 
       - name: push image to dockerhub
         run: docker push $DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG
+
+      - name: generate metadata
+        run: |
+          echo '{
+            "commit_sha": "${{ github.sha }}",
+            "image_tag": "'$DOCKER_USERNAME/$IMAGE_NAME:$IMAGE_TAG'",
+            "timestamp": "'$(date -u +"%Y-%m-%dT%H:%M:%SZ")'",
+            "pipeline_run_id": "${{ github.run_id }}"
+          }' > metadata.json
