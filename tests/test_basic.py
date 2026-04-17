@@ -1,5 +1,11 @@
-from app.main import add
+from fastapi.testclient import TestClient
+from app.main import app
+
+client = TestClient(app)
 
 
-def test_add():
-    assert add(2, 3) == 5
+def test_root():
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.json() == {"message": "app running"}
+    
