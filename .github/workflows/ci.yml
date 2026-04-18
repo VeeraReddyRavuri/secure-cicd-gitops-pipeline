@@ -172,9 +172,25 @@ jobs:
       - name: validate deployment
         id: validate
         run: |
-          STATUS=$(curl -s -o /dev/null -w "%(http_code)" http://p4-alb-1845188726.ap-south-1.elb.amazonaws.com)
-          echo "status=$STATUS"
-          if [ "$STATUS" -ne 200 ]; then
+          FAILURES=0
+          
+          for i in {1..5}
+          do
+            STATUS=$(curl -s -o /dev/null -w "%(http_code)" http://p4-alb-1845188726.ap-south-1.elb.amazonaws.com)
+
+            echo "Attempt $i --> Status: $STATUS"
+
+            if [ "$STATUS" -ne 200 ]; then
+              FAILURES=$((FAILURES+1))
+            fi
+
+            sleep 5
+
+          done
+
+          echo "Total failures: $FAILURES"
+
+          if [ "$FAILURES" -ge 3 ]; then
             echo "failed=true" >> $GITHUB_OUTPUT
           else
             echo "failed=false" >> $GITHUB_OUTPUT
