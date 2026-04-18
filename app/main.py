@@ -1,8 +1,8 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 
 app = FastAPI()
 
 
 @app.get("/")
 def read_root():
-    raise Exception("forced failure")
+    return Response(content="failure", status_code=500)
