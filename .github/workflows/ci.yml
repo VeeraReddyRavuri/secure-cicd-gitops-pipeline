@@ -196,7 +196,7 @@ jobs:
             echo "failed=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: rollback if failed
+      - name: taffic rollback if failed
         if: steps.validate.outputs.failed == 'true'
         run: |
           echo "Rolling back..."
@@ -224,6 +224,18 @@ jobs:
           aws elbv2 modify-listener \
             --listener-arn arn:aws:elasticloadbalancing:ap-south-1:006604849746:listener/app/p4-alb/89eca7a7a68b632d/c6c1e062642258eb \
             --default-actions file://rollback.json
+      
+      - name: revert manifest repo if failed
+        if: steps.validate.outputs.failed == 'true'
+        run: |
+          cd app-manifest-repo
+
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+
+          git revert HEAD --no-edit
+          
+          git push origin main
 
       - name: success message
         if: steps.validate.outputs.failed == 'false'
