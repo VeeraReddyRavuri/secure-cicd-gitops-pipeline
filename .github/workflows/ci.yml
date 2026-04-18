@@ -174,7 +174,7 @@ jobs:
         run: |
           FAILURES=0
           
-          for i in {1..5}
+          for i in {1..20}
           do
             STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://p4-alb-1845188726.ap-south-1.elb.amazonaws.com)
 
@@ -190,7 +190,7 @@ jobs:
 
           echo "Total failures: $FAILURES"
 
-          if [ "$FAILURES" -ge 3 ]; then
+          if [ "$FAILURES" -ge 5 ]; then
             echo "failed=true" >> $GITHUB_OUTPUT
           else
             echo "failed=false" >> $GITHUB_OUTPUT
