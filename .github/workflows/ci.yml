@@ -166,7 +166,7 @@ jobs:
           EOF
 
           aws elbv2 modify-listener \
-            --listener-arn arn:aws:elasticloadbalancing:ap-south-1:006604849746:loadbalancer/app/p4-alb/89eca7a7a68b632d \
+            --listener-arn arn:aws:elasticloadbalancing:ap-south-1:006604849746:listener/app/p4-alb/89eca7a7a68b632d/c6c1e062642258eb \
             --default-actions file://actions.json
       
       - name: validate deployment
