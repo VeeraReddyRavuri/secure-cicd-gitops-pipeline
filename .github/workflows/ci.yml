@@ -147,7 +147,7 @@ jobs:
         run: |
           aws elbv2 modify-listener \
             --listener-arn arn:aws:elasticloadbalancing:ap-south-1:006604849746:listener/app/p4-alb/89eca7a7a68b632d/c6c1e062642258eb \
-            --default-actions Type=forward,ForwardConfig="{\"TargetGroups\":[{\"TargetGroupArn\":\"arn:aws:elasticloadbalancing:ap-south-1:006604849746:targetgroup/p4-blue-tg/ea13d30d202ee2a2\",\"Weight\":90},{\"TargetGroupArn\":\"arn:aws:elasticloadbalancing:ap-south-1:006604849746:targetgroup/p4-green-tg/e70a979b068c8211\",\"Weight\":10}]}"
+            --default-actions 'Type=forward,ForwardConfig={"TargetGroups":[{"TargetGroupArn":"arn:aws:elasticloadbalancing:ap-south-1:006604849746:targetgroup/p4-blue-tg/ea13d30d202ee2a2","Weight":90},{"TargetGroupArn":"arn:aws:elasticloadbalancing:ap-south-1:006604849746:targetgroup/p4-green-tg/e70a979b068c8211","Weight":10}]}'
       
       - name: validate deployment
         id: validate
@@ -167,7 +167,7 @@ jobs:
 
           aws elbv2 modify-listener \
             --listener-arn arn:aws:elasticloadbalancing:ap-south-1:006604849746:listener/app/p4-alb/89eca7a7a68b632d/c6c1e062642258eb \
-            --default-actions Type=forward,ForwardConfig="{\"TargetGroups\":[{\"TargetGroupArn\":\"arn:aws:elasticloadbalancing:ap-south-1:006604849746:targetgroup/p4-blue-tg/ea13d30d202ee2a2\",\"Weight\":100},{\"TargetGroupArn\":\"arn:aws:elasticloadbalancing:ap-south-1:006604849746:targetgroup/p4-green-tg/e70a979b068c8211\",\"Weight\":0}]}"
+            --default-actions 'Type=forward,ForwardConfig={"TargetGroups":[{"TargetGroupArn":"arn:aws:elasticloadbalancing:ap-south-1:006604849746:targetgroup/p4-blue-tg/ea13d30d202ee2a2\","Weight":100},{"TargetGroupArn":"arn:aws:elasticloadbalancing:ap-south-1:006604849746:targetgroup/p4-green-tg/e70a979b068c8211","Weight":0}]}'
 
       - name: success message
         if: steps.validate.outputs.failed == 'false'
