@@ -124,3 +124,61 @@ jobs:
         run: |
           cd app-manifest-repo
           git push origin main
+
+  post_deploy_validate:
+    needs: build
+    runs-on: ubuntu-latest
+
+    env:
+      ALB_DNS: p4-alb-1845188726.ap-south-1.elb.amazonaws.com
+    
+    steps:
+      - name: configure aws credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: wait for deployment
+        run: sleep 60
+
+      - name: shift traffic to 90/10
+        run: |
+          aws elbv2 modify-listener \
+            --listener-arn arn:aws:elasticloadbalancing:ap-south-1:006604849746:listener/app/p4-alb/89eca7a7a68b632d/c6c1e062642258eb \
+            --default-actions Type=forward,ForwardConfig='{
+              "TargetGroups":[
+                {"TargetGroupArn":"arn:aws:elasticloadbalancing:ap-south-1:006604849746:targetgroup/p4-blue-tg/ea13d30d202ee2a2","Weight":90},
+                {"TargetGroupArn":"arn:aws:elasticloadbalancing:ap-south-1:006604849746:targetgroup/p4-green-tg/e70a979b068c8211","Weight":10}
+              ]
+            }'
+      
+      - name: validate deployment
+        id: validate
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%(http_code)" http://p4-alb-1845188726.ap-south-1.elb.amazonaws.com)
+          echo "status=$STATUS"
+          if [ "$STATUS" -ne 200 ]; then
+            echo "failed=true" >> $GITHUB_OUTPUT
+          else
+            echo "failed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: rollback if failed
+        if: steps.validate.outputs.failed == 'true'
+        run: |
+          echo "Rolling back..."
+
+          aws elbv2 modify-listener \
+            --listener-arn arn:aws:elasticloadbalancing:ap-south-1:006604849746:listener/app/p4-alb/89eca7a7a68b632d/c6c1e062642258eb \
+            --default-actions Type=forward,ForwardConfig='{
+              "TargetGroups":[
+                {"TargetGroupArn":"arn:aws:elasticloadbalancing:ap-south-1:006604849746:targetgroup/p4-blue-tg/ea13d30d202ee2a2","Weight":100},
+                {"TargetGroupArn":"arn:aws:elasticloadbalancing:ap-south-1:006604849746:targetgroup/p4-green-tg/e70a979b068c8211","Weight":0}
+              ]
+            }' 
+
+      - name: success message
+        if: steps.validate.outputs.failed == 'false'
+        run: echo "Deployment successful"
