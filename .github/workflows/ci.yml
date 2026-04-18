@@ -176,7 +176,7 @@ jobs:
           
           for i in {1..5}
           do
-            STATUS=$(curl -s -o /dev/null -w "%(http_code)" http://p4-alb-1845188726.ap-south-1.elb.amazonaws.com)
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://p4-alb-1845188726.ap-south-1.elb.amazonaws.com)
 
             echo "Attempt $i --> Status: $STATUS"
 
