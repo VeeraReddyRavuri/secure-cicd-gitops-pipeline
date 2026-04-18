@@ -173,6 +173,7 @@ jobs:
         id: validate
         run: |
           FAILURES=0
+          TOTAL=20
           
           for i in {1..20}
           do
@@ -184,13 +185,16 @@ jobs:
               FAILURES=$((FAILURES+1))
             fi
 
-            sleep 5
-
+            sleep 2
           done
 
           echo "Total failures: $FAILURES"
 
-          if [ "$FAILURES" -ge 5 ]; then
+          FAILURE_RATE=$((FAILURES * 100 / TOTAL))
+
+          echo "Failure rate: $FAILURE_RATE%"
+
+          if [ "$FAILURE_RATE" -ge 15 ]; then
             echo "failed=true" >> $GITHUB_OUTPUT
           else
             echo "failed=false" >> $GITHUB_OUTPUT
