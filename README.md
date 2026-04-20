@@ -5,7 +5,8 @@
 ![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-2088FF?style=flat&logo=githubactions&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=white)
 ![Python](https://img.shields.io/badge/Python_3.12-3776AB?style=flat&logo=python&logoColor=white)
-![Flask](https://img.shields.io/badge/Flask-000000?style=flat&logo=flask&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat&logo=fastapi&logoColor=white)
+![CloudWatch](https://img.shields.io/badge/CloudWatch-FF4F8B?style=flat&logo=amazonaws&logoColor=white)
 ![AWS](https://img.shields.io/badge/AWS-232F3E?style=flat&logo=amazonaws&logoColor=white)
 ![Amazon S3](https://img.shields.io/badge/Amazon_S3-569A31?style=flat&logo=amazons3&logoColor=white)
 ![Amazon EC2](https://img.shields.io/badge/Amazon_EC2-FF9900?style=flat&logo=amazonec2&logoColor=white)
@@ -38,63 +39,55 @@
 
 ---
 
-## Architecture
+## [Architecture](./docs/architecture.md)
 
 ```mermaid
 flowchart TD
-    DEV([Developer]) -->|git push to main| GH[GitHub App Repo]
+    DEV([Developer])
 
-    GH -->|triggers| GA[GitHub Actions Pipeline]
-
-    subgraph CI ["CI — Verify & Build"]
-        GA --> LINT[Lint - flake8]
-        GA --> TEST[Test - pytest]
-        LINT --> BUILD[Build Docker Image\ngit SHA tag]
-        TEST --> BUILD
-        BUILD --> TRIVY{Trivy Scan\nCRITICAL CVE?}
-        TRIVY -->|CVE found| FAIL[ Pipeline Fails\nDeploy Blocked]
-        TRIVY -->|Clean| PUSH[Push Image to DockerHub]
+    subgraph GITHUB ["GitHub"]
+        APP[App Repo · cloud-engineer-labs]
+        MANIFEST[Manifest Repo · manifests]
+        GA[GitHub Actions Runner]
     end
 
-    subgraph ARTIFACT ["Artifact & Metadata"]
-        PUSH --> S3[Upload deployment record to S3 (stores commit SHA, timestamp, scan status for audit and incident debugging)\nSHA · timestamp · trivy status]
+    subgraph REGISTRY ["Registry and Storage"]
+        DH[DockerHub · image store]
+        S3[S3 · deployment records]
     end
 
-    subgraph GITOPS ["GitOps — Manifest Update"]
-        S3 --> MANIFEST[Update Manifest Repo\ndeployment.yml → new image SHA]
+    subgraph AWS ["AWS Infrastructure"]
+        EC2[EC2 Instance]
+        subgraph CONTAINERS ["Containers"]
+            BLUE[Blue · port 8080]
+            GREEN[Green · port 8081]
+        end
+        ALB[Application Load Balancer]
+        CW[CloudWatch · health metrics]
     end
 
-    subgraph DEPLOY ["Deploy — Blue/Green Canary"]
-        MANIFEST --> GREEN[Start Green Container\nEC2 port 8081]
-        GREEN --> ALB[ALB Listener Rule\n90% Blue · 10% Green]
-        ALB --> BLUE[Blue Container\nEC2 port 8080]
-        ALB --> GREENC[Green Container\nEC2 port 8081]
-    end
+    USERS([Users])
 
-    subgraph VALIDATE ["Validate — Health Check Loop"]
-        ALB --> VAL{Failure Rate\n≥ Threshold?}
-        VAL -->|No — healthy| PROMOTE[Promote Green to 100%\nDecommission Blue]
-        VAL -->|Yes — unhealthy| ROLLBACK[Automatic Rollback]
-        ROLLBACK --> RB1[ALB → 100% Blue]
-        ROLLBACK --> RB2[git revert Manifest Repo]
-        RB1 --> SAFE[✅ System Restored\nLast Known Good State]
-        RB2 --> SAFE
-    end
+    DEV -->|push code| APP
+    APP -->|triggers| GA
+    GA -->|push image| DH
+    GA -->|write record| S3
+    GA -->|update image SHA| MANIFEST
+    DH -->|pull image| EC2
+    MANIFEST -->|source of truth| EC2
+    EC2 --- BLUE
+    EC2 --- GREEN
+    BLUE --> ALB
+    GREEN --> ALB
+    ALB -->|weighted routing| USERS
+    ALB -->|health metrics| CW
 
-    PROMOTE --> USERS([🌐 Users])
-    BLUE --> USERS
-    GREENC --> USERS
-
-    style FAIL fill:#ff4d4d,color:#fff
-    style SAFE fill:#2d8a4e,color:#fff
-    style PROMOTE fill:#2d8a4e,color:#fff
-    style TRIVY fill:#f0a500,color:#fff
-    style VAL fill:#f0a500,color:#fff
-    style CI fill:#1a1a2e,color:#fff
-    style ARTIFACT fill:#16213e,color:#fff
-    style GITOPS fill:#0f3460,color:#fff
-    style DEPLOY fill:#1a1a2e,color:#fff
-    style VALIDATE fill:#16213e,color:#fff
+    style GITHUB fill:#1a1a2e,color:#fff
+    style REGISTRY fill:#16213e,color:#fff
+    style AWS fill:#0f3460,color:#fff
+    style CONTAINERS fill:#1a1a2e,color:#fff
+    style ALB fill:#FF9900,color:#000
+    style CW fill:#FF9900,color:#000
 ```
 
 **Key design principle:** The pipeline never applies infrastructure changes directly. It updates the manifest repo and stops. The system is designed to be compatible with GitOps agents like ArgoCD (not deployed in this project), which would pull and apply the desired state.
@@ -105,32 +98,32 @@ flowchart TD
 
 ```mermaid
 flowchart LR
-    COMMIT([commit]) --> LINT[lint\nflake8]
-    COMMIT --> TEST[test\npytest]
+    COMMIT([commit]) --> LINT[lint · flake8]
+    COMMIT --> TEST[test · pytest]
 
-    LINT --> BUILD[build docker image\ngit SHA tag]
+    LINT --> BUILD[build image · git SHA]
     TEST --> BUILD
 
-    BUILD --> SCAN[trivy scan\nCRITICAL gate]
-    SCAN -->|CVE found| BLOCKED([blocked])
-    SCAN -->|clean| PUSH[push image\nDockerHub]
+    BUILD --> SCAN{trivy scan · CRITICAL?}
+    SCAN -->|CVE found| BLOCKED([pipeline blocked])
+    SCAN -->|clean| PUSH[push to DockerHub]
 
-    PUSH --> S3[upload S3\ndeployment record]
-    S3 --> MANIFEST[update manifest repo\nnew SHA]
-    MANIFEST --> GREEN[deploy green\nEC2 port 8081]
-    GREEN --> ALB[shift ALB traffic\n90% blue · 10% green]
-    ALB --> VAL[validate\nretry + failure rate check]
+    PUSH --> S3[upload S3 record]
+    S3 --> MANIFEST[update manifest repo · new SHA]
+    MANIFEST --> GREEN[deploy green · port 8081]
+    GREEN --> ALB[shift ALB · 90% blue · 10% green]
+    ALB --> VAL{failure rate above threshold?}
 
-    VAL -->|pass ✓| PROMOTE[promote green\ndecommission blue]
-    VAL -->|fail ✗| RB1[ALB → 100% blue]
-    VAL -->|fail ✗| RB2[git revert\nmanifest repo]
+    VAL -->|pass| PROMOTE[promote green · decommission blue]
+    VAL -->|fail| RB1[ALB to 100% blue]
+    VAL -->|fail| RB2[git revert manifest]
 
     style BLOCKED fill:#ff4d4d,color:#fff
     style PROMOTE fill:#2d8a4e,color:#fff
     style RB1 fill:#c0392b,color:#fff
     style RB2 fill:#c0392b,color:#fff
-    style SCAN fill:#f0a500,color:#fff
-    style VAL fill:#f0a500,color:#fff
+    style SCAN fill:#f0a500,color:#000
+    style VAL fill:#f0a500,color:#000
 ```
 
 ---
@@ -151,6 +144,15 @@ Failing the pipeline on HIGH and above generates alert fatigue — teams start i
 
 ### Failure rate validation over single health check
 A single `/health` endpoint returning 200 doesn't reflect real application health — it only proves the process is alive. Monitoring the failure rate of actual traffic requests during the canary window catches errors that a shallow health check misses. Tradeoff: requires a validation window (time cost) rather than instant promotion.
+
+### Logging
+
+The application implements basic structured logging using Python’s logging module:
+- Logs incoming requests and response status codes
+- Timestamped logs for debugging
+- Accessible via container logs (`docker logs`)
+
+Note: Logging is minimal and not centralized. Production systems would use log aggregation (e.g., CloudWatch, ELK).
 
 ---
 
@@ -211,11 +213,11 @@ This ensures the system is tested under real runtime failure conditions rather t
 
 | Scenario | Pipeline Stage | Error Message | Root Cause | Resolution |
 |---|---|---|---|---|
-| Wrong SSH key in secrets | deploy — git clone manifest repo | `Permission denied (publickey)` | Private key in secret doesn't match public deploy key registered in manifest repo | Replace `MANIFEST_REPO_SSH_KEY` secret with correct private key |
-| Dockerfile syntax error | build — docker build | `unknown instruction: FORM` (or similar) | Typo in Dockerfile instruction | Fix Dockerfile syntax, repush |
-| CRITICAL CVE introduced | scan — trivy | `exit code 1`, CVE list printed | Vulnerable package version in `requirements.txt` | Update or replace the vulnerable package |
-| Runtime 500 errors post-deploy | post-deploy validation | Failure rate ≥ threshold | Application bug in new version not caught by unit tests | Automatic rollback triggers — fix bug, create new commit |
-| ALB misconfiguration | post-deploy | `502 Bad Gateway` | Target group pointing to wrong port or unhealthy targets | Verify target group port config (8080/8081), check security group rules |
+| [Wrong SSH key in secrets](./incident_reports/ssh-key-failure.md) | deploy — git clone manifest repo | `Permission denied (publickey)` | Private key in secret doesn't match public deploy key registered in manifest repo | Replace `MANIFEST_REPO_SSH_KEY` secret with correct private key |
+| [Dockerfile syntax error](./incident_reports/dockerfile-syntax-error.md) | build — docker build | `unknown instruction: FORM` (or similar) | Typo in Dockerfile instruction | Fix Dockerfile syntax, repush |
+| [CRITICAL CVE introduced](./incident_reports/trivy-cve-failure.md) | scan — trivy | `exit code 1`, CVE list printed | Vulnerable package version in `requirements.txt` | Update or replace the vulnerable package |
+| [Runtime 500 errors post-deploy](./incident_reports/runtime-healthcheck-failure.md) | post-deploy validation | Failure rate ≥ threshold | Application bug in new version not caught by unit tests | Automatic rollback triggers — fix bug, create new commit |
+| [ALB misconfiguration](./incident_reports/alb-misconfiguration.md) | post-deploy | `502 Bad Gateway` | Target group pointing to wrong port or unhealthy targets | Verify target group port config (8080/8081), check security group rules |
 
 ---
 
