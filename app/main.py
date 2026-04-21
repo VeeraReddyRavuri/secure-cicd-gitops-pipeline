@@ -26,4 +26,3 @@ async def log_requests(request: Request, call_next):
 
     logger.info(f"Response status: {response.status_code}")
     return response
-
