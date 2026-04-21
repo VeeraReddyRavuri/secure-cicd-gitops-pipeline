@@ -1,4 +1,4 @@
-from fastapi.testclient import TestClient
+from fastapi.testclient import TestClient, Response
 from app.main import app
 
 client = TestClient(app)
@@ -7,5 +7,3 @@ client = TestClient(app)
 def test_root():
     response = client.get("/")
     assert response.status_code in [200, 500]
-    #assert response.status_code == 200
-    #assert response.json() == {"message": "app running"}

@@ -1,5 +1,5 @@
 import logging
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 
 # Configure logging
 logging.basicConfig(
@@ -16,7 +16,6 @@ app = FastAPI()
 def read_root():
     logger.info("Root endpoint called")
     return Response(content="failure", status_code=500)
-    #return {"message": "app running"}
 
 
 @app.middleware("http")
