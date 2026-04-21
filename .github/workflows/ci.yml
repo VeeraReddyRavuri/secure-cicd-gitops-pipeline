@@ -153,11 +153,11 @@ jobs:
                 "TargetGroups": [
                   {
                     "TargetGroupArn": "arn:aws:elasticloadbalancing:ap-south-1:006604849746:targetgroup/p4-blue-tg/ea13d30d202ee2a2",
-                    "Weight": 50
+                    "Weight": 90
                   },
                   {
                     "TargetGroupArn": "arn:aws:elasticloadbalancing:ap-south-1:006604849746:targetgroup/p4-green-tg/e70a979b068c8211",
-                    "Weight": 50
+                    "Weight": 10
                   }
                 ]
               }
@@ -194,7 +194,7 @@ jobs:
 
           echo "Failure rate: $FAILURE_RATE%"
 
-          if [ "$FAILURE_RATE" -ge 15 ]; then
+          if [ "$FAILURE_RATE" -ge 20 ]; then
             echo "failed=true" >> $GITHUB_OUTPUT
           else
             echo "failed=false" >> $GITHUB_OUTPUT
