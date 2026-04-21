@@ -15,7 +15,8 @@ app = FastAPI()
 @app.get("/")
 def read_root():
     logger.info("Root endpoint called")
-    return {"message": "app running"}
+    return Response(content="failure", status_code=500)
+    #return {"message": "app running"}
 
 
 @app.middleware("http")
