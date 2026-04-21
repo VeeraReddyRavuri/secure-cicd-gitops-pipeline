@@ -20,8 +20,7 @@
 
 ## TL;DR
 
-- Built a production-style CI/CD pipeline that performs secure image builds, GitOps-based deployments, canary traffic shifting via AWS ALB, and automated rollback (traffic + state) based on runtime health validation. 
-- Demonstrates real-world deployment safety patterns beyond simple push-to-deploy pipelines including supply chain security, manifest repo separation, and failure-driven engineering.
+Engineered a production-grade, GitOps-driven CI/CD pipeline that prioritizes real-world deployment safety and failure-driven engineering. Moving far beyond basic push-to-deploy setups, the system integrates robust supply chain security, isolated manifest repositories, AWS ALB-managed canary traffic shifting, and automated traffic-and-state rollbacks triggered by strict runtime health validation.
 
 ---
 
@@ -39,55 +38,55 @@
 
 ---
 
+## Key Engineering Highlights
+
+- GitOps-based deployment using a separate manifest repository
+- Blue/Green deployment with ALB weighted traffic shifting
+- Canary rollout (gradual traffic exposure before full promotion)
+- Failure-rate–based validation (not just health checks)
+- Automated rollback strategy:
+  - Traffic rollback (ALB weight reset)
+  - State rollback (Git revert in manifest repo)
+- Security gating using Trivy (blocks CRITICAL vulnerabilities)
+- Immutable image tagging using commit SHA
+
+---
+
 ## [Architecture](./docs/architecture.md)
 
 ```mermaid
 flowchart TD
-    DEV([Developer])
+    DEV([Developer]) -->|git push to main| GH[GitHub App Repo]
+    GH -->|triggers| GA[GitHub Actions]
 
-    subgraph GITHUB ["GitHub"]
-        APP[App Repo · cloud-engineer-labs]
-        MANIFEST[Manifest Repo · manifests]
-        GA[GitHub Actions Runner]
+    GA -->|push image| DH[DockerHub · image store]
+    GA -->|write record| S3[S3 · deployment metadata]
+    GA -->|update image SHA| MR[Manifest Repo · GitOps state]
+
+    MR -->|source of truth| EC2[EC2 Instance]
+
+    subgraph EC2_RUNTIME ["EC2 Runtime"]
+        BLUE[Blue Container · port 8080]
+        GREEN[Green Container · port 8081]
     end
 
-    subgraph REGISTRY ["Registry and Storage"]
-        DH[DockerHub · image store]
-        S3[S3 · deployment records]
-    end
-
-    subgraph AWS ["AWS Infrastructure"]
-        EC2[EC2 Instance]
-        subgraph CONTAINERS ["Containers"]
-            BLUE[Blue · port 8080]
-            GREEN[Green · port 8081]
-        end
-        ALB[Application Load Balancer]
-        CW[CloudWatch · health metrics]
-    end
-
-    USERS([Users])
-
-    DEV -->|push code| APP
-    APP -->|triggers| GA
-    GA -->|push image| DH
-    GA -->|write record| S3
-    GA -->|update image SHA| MANIFEST
-    DH -->|pull image| EC2
-    MANIFEST -->|source of truth| EC2
     EC2 --- BLUE
     EC2 --- GREEN
-    BLUE --> ALB
-    GREEN --> ALB
-    ALB -->|weighted routing| USERS
-    ALB -->|health metrics| CW
 
-    style GITHUB fill:#1a1a2e,color:#fff
-    style REGISTRY fill:#16213e,color:#fff
-    style AWS fill:#0f3460,color:#fff
-    style CONTAINERS fill:#1a1a2e,color:#fff
+    subgraph ALB_LAYER ["Application Load Balancer"]
+        ALB[ALB · weighted routing]
+        TGB[Blue Target Group · 8080]
+        TGG[Green Target Group · 8081]
+    end
+
+    ALB --> TGB --> BLUE
+    ALB --> TGG --> GREEN
+
+    USERS([Users]) --> ALB
+
+    style EC2_RUNTIME fill:#1a1a2e,color:#fff
+    style ALB_LAYER fill:#0f3460,color:#fff
     style ALB fill:#FF9900,color:#000
-    style CW fill:#FF9900,color:#000
 ```
 
 **Key design principle:** The pipeline never applies infrastructure changes directly. It updates the manifest repo and stops. The system is designed to be compatible with GitOps agents like ArgoCD (not deployed in this project), which would pull and apply the desired state.
@@ -144,15 +143,6 @@ Failing the pipeline on HIGH and above generates alert fatigue — teams start i
 
 ### Failure rate validation over single health check
 A single `/health` endpoint returning 200 doesn't reflect real application health — it only proves the process is alive. Monitoring the failure rate of actual traffic requests during the canary window catches errors that a shallow health check misses. Tradeoff: requires a validation window (time cost) rather than instant promotion.
-
-### Logging
-
-The application implements basic structured logging using Python’s logging module:
-- Logs incoming requests and response status codes
-- Timestamped logs for debugging
-- Accessible via container logs (`docker logs`)
-
-Note: Logging is minimal and not centralized. Production systems would use log aggregation (e.g., CloudWatch, ELK).
 
 ---
 
@@ -229,7 +219,7 @@ secure-cicd-gitops-pipeline/
 │   └── workflows/
 │       └── pipeline.yml        # Full CI/CD pipeline definition
 ├── app/
-│   ├── app.py                  # Flask application
+│   ├── app.py                  # Fast API application
 │   └── requirements.txt        # Python dependencies
 ├── tests/
 │   └── test_app.py             # Unit tests (pytest)
@@ -237,10 +227,9 @@ secure-cicd-gitops-pipeline/
 ├── .dockerignore
 └── README.md
 
-# Separate manifest repo: secure-cicd-gitops-pipeline-manifests/
-├── manifests/
-│   ├── deployment.yml          # Image tag updated by pipeline on every deploy
-│   └── service.yml
+# Separate manifest repo: app-manifest-repo/
+├── k8s/
+│   └── deployment.yaml         # Image tag updated by pipeline on every deploy
 └── README.md
 ```
 
@@ -261,7 +250,7 @@ secure-cicd-gitops-pipeline/
 | `EC2_HOST` | Public IP or DNS of EC2 instance |
 | `EC2_SSH_KEY` | Private key for SSH access to EC2 |
 
-> **Known limitation on auth**: This project uses static AWS credentials for simplicity during initial build. Production improvement: replace `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` with OIDC identity federation — IAM role trust policy scoped to this specific repo and branch, no stored credentials. See Module 3 notes in `docs/`.
+> **Known limitation on auth**: This project uses static AWS credentials for simplicity during initial build. Production improvement: replace `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` with OIDC identity federation — IAM role trust policy scoped to this specific repo and branch, no stored credentials.
 
 ### AWS Infrastructure (Manual Provisioning)
 
@@ -281,28 +270,53 @@ secure-cicd-gitops-pipeline/
 2. Configure all GitHub Secrets listed above
 3. Provision AWS infrastructure per prerequisites
 4. Push any commit to `main`
-5. Watch the pipeline in GitHub Actions:
-   - Lint and test run in parallel
-   - Build produces image tagged with git SHA
-   - Trivy scans for CRITICAL CVEs — pipeline stops if found
-   - Image pushed to DockerHub
-   - Deployment record uploaded to S3
-   - Manifest repo updated with new SHA
-   - Green container deployed on EC2 port 8081
-   - ALB shifts to 90/10 canary
-   - Validation loop runs for configured window
-   - Promotion or rollback executes automatically
+5. Push any commit to main and monitor the pipeline in GitHub Actions
 
 ---
 
 ## Demo
 
-> 📹 Screen recording covers:
-> - Successful deploy: commit → canary → promotion → Blue decommissioned
-> - Failure injection: 500 errors introduced → validation detects → auto rollback to Blue → manifest repo reverted
-> - Wrong SSH key: pipeline fails at deploy stage with `Permission denied (publickey)`
+### Successful Deployment (Happy Path)
 
-*(Link to be added after recording)*
+![Successful Demo](./demo/success-deploy.gif)
+
+Shows:
+- CI/CD pipeline execution
+- Canary deployment (90/10)
+- Validation success
+- Promotion to 100% Green
+
+---
+
+### Failure Handling & Rollback
+
+![Rollback Demo](./demo/rollback-deploy.gif)
+
+Shows:
+- Runtime failure injection
+- Failure rate detection
+- Automatic rollback (ALB traffic shift)
+- GitOps state revert via manifest repo
+
+---
+
+## Observability
+
+### Structured Logging
+
+The application implements basic structured logging using Python’s logging module:
+
+- Logs include timestamp, log level, and message format
+- Captures incoming requests and response status codes
+- Example format:
+  2026-04-21 10:00:00 | INFO | Incoming request: GET /
+
+Logs are accessible via:
+- `docker logs blue`
+- `docker logs green`
+
+Note:
+Logging is local to containers and not centralized. In production, this would be extended using systems like CloudWatch or ELK for aggregation and analysis.
 
 ---
 

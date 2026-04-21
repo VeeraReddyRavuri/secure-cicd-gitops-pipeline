@@ -14,7 +14,11 @@ app = FastAPI()
 
 @app.get("/")
 def read_root():
-    return Response(content="failure", status_code=500)
+    try:
+        return {"message": "app running"}
+    except Exception as e:
+        logger.error(f"Error in root endpoint: {e}")
+        return Response(content="error", status_code=500)
 
 
 @app.middleware("http")

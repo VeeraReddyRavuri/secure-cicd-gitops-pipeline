@@ -130,7 +130,10 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      ALB_DNS: p4-alb-1845188726.ap-south-1.elb.amazonaws.com
+      ALB_DNS: ${{ secrets.ALB_DNS }}
+      BLUE_TG_ARN: ${{ secrets.BLUE_TG_ARN }}
+      GREEN_TG_ARN: ${{ secrets.GREEN_TG_ARN }}
+      LISTENER_ARN: ${{ secrets.LISTENER_ARN }}
     
     steps:
       - name: configure aws credentials
@@ -152,11 +155,11 @@ jobs:
               "ForwardConfig": {
                 "TargetGroups": [
                   {
-                    "TargetGroupArn": "arn:aws:elasticloadbalancing:ap-south-1:006604849746:targetgroup/p4-blue-tg/ea13d30d202ee2a2",
+                    "TargetGroupArn": "${BLUE_TG_ARN}",
                     "Weight": 50
                   },
                   {
-                    "TargetGroupArn": "arn:aws:elasticloadbalancing:ap-south-1:006604849746:targetgroup/p4-green-tg/e70a979b068c8211",
+                    "TargetGroupArn": "${GREEN_TG_ARN}",
                     "Weight": 50
                   }
                 ]
@@ -166,7 +169,7 @@ jobs:
           EOF
 
           aws elbv2 modify-listener \
-            --listener-arn arn:aws:elasticloadbalancing:ap-south-1:006604849746:listener/app/p4-alb/89eca7a7a68b632d/c6c1e062642258eb \
+            --listener-arn $LISTENER_ARN \
             --default-actions file://actions.json
       
       - name: validate deployment
@@ -177,7 +180,7 @@ jobs:
           
           for i in {1..20}
           do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://p4-alb-1845188726.ap-south-1.elb.amazonaws.com)
+            STATUS=STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://$ALB_DNS)
 
             echo "Attempt $i --> Status: $STATUS"
 
@@ -226,7 +229,7 @@ jobs:
           EOF
 
           aws elbv2 modify-listener \
-            --listener-arn arn:aws:elasticloadbalancing:ap-south-1:006604849746:listener/app/p4-alb/89eca7a7a68b632d/c6c1e062642258eb \
+            --listener-arn $LISTENER_ARN \
             --default-actions file://rollback.json
       
       - name: setup ssh
